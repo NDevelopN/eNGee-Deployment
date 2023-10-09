@@ -1,0 +1,55 @@
+services:
+  ngdb:
+    image: "postgres:latest"
+    container_name: ngdb
+    env_file:
+      - .env
+    environment:
+      - PGUSER=${POSTGRES_USER}
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+      - .01-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports: 
+      - "${POSTGRES_OUTER}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -p 5432"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  ngserver:
+    depends_on:
+      ngdb:
+        condition: service_healthy
+    build:
+      dockerfile: server.Dockerfile
+      context: .
+    image: ng/server
+    container_name: ngserver
+    env_file:
+      - .env
+    ports: 
+      - "${SERVER_OUTER}:${SERVER_INNER}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://${SERVER_HOST}:${SERVER_OUTER}/games"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+  ngclient:
+    depends_on:
+      ngserver:
+        condition: service_healthy
+    build: 
+      dockerfile: client.Dockerfile
+      context: .
+    image: ng/client
+    container_name: ngclient
+    env_file:
+      - .env
+    ports: 
+      - "${CLIENT_OUTER}:${CLIENT_INNER}"
+volumes:
+  ngdb-vol:
+    external: true
